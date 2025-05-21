@@ -27,6 +27,15 @@ const measurementStartDate = ref(null); // Start date of the measurement period
 const measurementEndDate = ref(null); // End date of the measurement period
 const controlsCollapsed = ref(false); // Track if controls are collapsed
 
+// CSV file selection
+const availableCsvFiles = ref([
+  { name: 'BP_dump.csv', path: '/BP_dump.csv', label: 'BP Dump (Default)' },
+  { name: 'Your Requested OMRON Report from 21 Nov 2024 to 21 May 2025.csv', path: '/Your Requested OMRON Report from 21 Nov 2024 to 21 May 2025.csv', label: 'OMRON Report (Nov 2024 - May 2025)' },
+  { name: 'Your Requested OMRON Report from 29 Jun 2023 to 31 Dec 2023.csv', path: '/Your Requested OMRON Report from 29 Jun 2023 to 31 Dec 2023.csv', label: 'OMRON Report (Jun 2023 - Dec 2023)' }
+]);
+const selectedCsvFile = ref(availableCsvFiles.value[0]); // Default to the first file
+const uploadedCsvFile = ref(null); // For user-uploaded CSV files
+
 // Data for filtered graphs
 const highBPData = ref([]); // Data for systolic >= 140 mmHg
 const mediumBPData = ref([]); // Data for systolic between 130-140 mmHg
@@ -80,17 +89,41 @@ const bpLevels = {
 const loadData = async () => {
   try {
     loading.value = true;
-    // Get the base URL of the application
-    const baseUrl = window.location.origin;
-    const csvUrl = `${baseUrl}/BP_dump.csv`;
-    console.log('Fetching CSV data from:', csvUrl);
 
-    const response = await fetch(csvUrl);
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+    let csvText;
+
+    // Check if we're using an uploaded file or a predefined one
+    if (uploadedCsvFile.value) {
+      // Read the uploaded file
+      csvText = await readUploadedFile(uploadedCsvFile.value);
+      console.log('Using uploaded CSV file:', uploadedCsvFile.value.name);
+    } else {
+      // Get the base URL of the application
+      const baseUrl = window.location.origin;
+      // Encode the file path to handle spaces and special characters
+      const encodedPath = selectedCsvFile.value.path.split('/').map(segment =>
+        segment ? encodeURIComponent(segment) : ''
+      ).join('/');
+      const csvUrl = `${baseUrl}${encodedPath}`;
+      console.log('Fetching CSV data from:', csvUrl);
+
+      const response = await fetch(csvUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      csvText = await response.text();
     }
 
-    const csvText = await response.text();
+    // Function to read an uploaded file
+    async function readUploadedFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (e) => reject(new Error('Error reading file'));
+        reader.readAsText(file);
+      });
+    }
     if (!csvText || csvText.trim() === '') {
       throw new Error('CSV file is empty');
     }
@@ -1601,6 +1634,56 @@ const updateLineColors = () => {
   prepareChartData();
 };
 
+// Handle changes to the selected CSV file
+const handleCsvFileChange = async () => {
+  console.log(`Selected CSV file changed to: ${selectedCsvFile.value.label}`);
+  uploadedCsvFile.value = null; // Clear any uploaded file
+
+  // Reset data
+  bpData.value = [];
+  chartData.value = null;
+  chartOptions.value = null;
+
+  // Reload data with the new file
+  try {
+    await loadData();
+    console.log('Data loaded and chart prepared');
+  } catch (err) {
+    console.error('Error loading data:', err);
+    error.value = 'Error loading data: ' + err.message;
+  }
+};
+
+// Handle file uploads
+const handleFileUpload = async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  // Check if it's a CSV file
+  if (!file.name.endsWith('.csv')) {
+    error.value = 'Please upload a CSV file';
+    return;
+  }
+
+  console.log(`File uploaded: ${file.name}`);
+  uploadedCsvFile.value = file;
+  selectedCsvFile.value = null; // Clear the selected file
+
+  // Reset data
+  bpData.value = [];
+  chartData.value = null;
+  chartOptions.value = null;
+
+  // Reload data with the uploaded file
+  try {
+    await loadData();
+    console.log('Data loaded and chart prepared');
+  } catch (err) {
+    console.error('Error loading data:', err);
+    error.value = 'Error loading data: ' + err.message;
+  }
+};
+
 // Format date for display in Romanian
 const formatDateRo = (date) => {
   if (!date) return '';
@@ -1655,6 +1738,38 @@ onMounted(async () => {
     </div>
 
     <div class="controls" :class="{ 'collapsed': controlsCollapsed }">
+      <!-- CSV File Selection -->
+      <div class="file-selection-control">
+        <div class="file-dropdown">
+          <label for="csv-file-select">Selectează fișierul CSV:</label>
+          <select
+            id="csv-file-select"
+            v-model="selectedCsvFile"
+            @change="handleCsvFileChange"
+            :disabled="uploadedCsvFile !== null"
+          >
+            <option v-for="file in availableCsvFiles" :key="file.path" :value="file">
+              {{ file.label }}
+            </option>
+          </select>
+        </div>
+
+        <div class="file-upload">
+          <label for="csv-file-upload">Sau încarcă un fișier CSV:</label>
+          <input
+            id="csv-file-upload"
+            type="file"
+            accept=".csv"
+            @change="handleFileUpload"
+            :disabled="selectedCsvFile !== null && uploadedCsvFile === null"
+          />
+          <div v-if="uploadedCsvFile" class="uploaded-file-info">
+            Fișier încărcat: {{ uploadedCsvFile.name }}
+            <button @click="uploadedCsvFile = null; selectedCsvFile = availableCsvFiles[0]; handleCsvFileChange()">Șterge</button>
+          </div>
+        </div>
+      </div>
+
       <div class="interval-control">
         <label for="interval-days">Interval zile pentru medie:</label>
         <input
@@ -2072,6 +2187,90 @@ h2 {
   max-height: 0;
   opacity: 0;
   margin-bottom: 0;
+}
+
+/* File selection controls */
+.file-selection-control {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 600px;
+  margin-bottom: 15px;
+}
+
+.file-dropdown, .file-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-dropdown label, .file-upload label {
+  font-weight: bold;
+  color: #333;
+}
+
+.file-dropdown select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  background-color: white;
+  cursor: pointer;
+}
+
+.file-dropdown select:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+}
+
+.file-dropdown select:disabled {
+  background-color: #e9ecef;
+  cursor: not-allowed;
+}
+
+.file-upload input[type="file"] {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
+  cursor: pointer;
+}
+
+.file-upload input[type="file"]:disabled {
+  background-color: #e9ecef;
+  cursor: not-allowed;
+}
+
+.uploaded-file-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background-color: #e9f7fe;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.uploaded-file-info button {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.uploaded-file-info button:hover {
+  background-color: #c82333;
 }
 
 /* Night measurement legend */
