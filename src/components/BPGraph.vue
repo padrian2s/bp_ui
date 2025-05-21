@@ -28,12 +28,79 @@ const measurementEndDate = ref(null); // End date of the measurement period
 const controlsCollapsed = ref(false); // Track if controls are collapsed
 
 // CSV file selection
-const availableCsvFiles = ref([
-  { name: 'BP_dump.csv', path: '/BP_dump.csv', label: 'BP Dump (Default)' },
-  { name: 'Your Requested OMRON Report from 21 Nov 2024 to 21 May 2025.csv', path: '/Your Requested OMRON Report from 21 Nov 2024 to 21 May 2025.csv', label: 'OMRON Report (Nov 2024 - May 2025)' },
-  { name: 'Your Requested OMRON Report from 29 Jun 2023 to 31 Dec 2023.csv', path: '/Your Requested OMRON Report from 29 Jun 2023 to 31 Dec 2023.csv', label: 'OMRON Report (Jun 2023 - Dec 2023)' }
-]);
-const selectedCsvFile = ref(availableCsvFiles.value[0]); // Default to the first file
+const availableCsvFiles = ref([]);
+
+// Function to scan the /public directory for CSV files
+const scanPublicDirectory = async () => {
+  try {
+    // Get the base URL of the application
+    const baseUrl = window.location.origin;
+
+    // Fetch the list of files from the public directory
+    // Since we can't directly read the directory in the browser,
+    // we'll use fetch to get the files we know exist
+    const csvFiles = [
+      { name: 'BP_dump.csv', path: '/BP_dump.csv' },
+      { name: 'Your Requested OMRON Report from 17 Nov 2024 to 21 May 2025.csv', path: '/Your Requested OMRON Report from 17 Nov 2024 to 21 May 2025.csv' },
+      { name: 'Your Requested OMRON Report from 21 Nov 2024 to 21 May 2025.csv', path: '/Your Requested OMRON Report from 21 Nov 2024 to 21 May 2025.csv' },
+      { name: 'Your Requested OMRON Report from 29 Jun 2023 to 31 Dec 2023.csv', path: '/Your Requested OMRON Report from 29 Jun 2023 to 31 Dec 2023.csv' }
+    ];
+
+    // Check each file to see if it exists and add it to availableCsvFiles
+    const filePromises = csvFiles.map(async (file) => {
+      try {
+        // Encode the file path to handle spaces and special characters
+        const encodedPath = file.path.split('/').map(segment =>
+          segment ? encodeURIComponent(segment) : ''
+        ).join('/');
+        const csvUrl = `${baseUrl}${encodedPath}`;
+
+        // Try to fetch the file to see if it exists
+        const response = await fetch(csvUrl, { method: 'HEAD' });
+
+        if (response.ok) {
+          // Create a label from the filename
+          let label = file.name;
+          if (file.name === 'BP_dump.csv') {
+            label = 'BP Dump (Default)';
+          } else if (file.name.startsWith('Your Requested OMRON Report from')) {
+            // Extract date range from filename
+            const dateMatch = file.name.match(/from (.*) to (.*).csv/);
+            if (dateMatch && dateMatch.length >= 3) {
+              label = `OMRON Report (${dateMatch[1]} - ${dateMatch[2]})`;
+            }
+          }
+
+          return { name: file.name, path: file.path, label };
+        }
+        return null;
+      } catch (error) {
+        console.error(`Error checking file ${file.name}:`, error);
+        return null;
+      }
+    });
+
+    // Wait for all file checks to complete
+    const validFiles = (await Promise.all(filePromises)).filter(file => file !== null);
+
+    // Update availableCsvFiles with the valid files
+    availableCsvFiles.value = validFiles;
+
+    // If no files were found, show an error
+    if (validFiles.length === 0) {
+      error.value = 'No CSV files found in the public directory';
+    } else {
+      // Set the default selected file to the first one
+      selectedCsvFile.value = validFiles[0];
+    }
+
+    console.log('Available CSV files:', validFiles);
+  } catch (error) {
+    console.error('Error scanning public directory:', error);
+    error.value = 'Error scanning public directory: ' + error.message;
+  }
+};
+const selectedCsvFile = ref(null); // Will be set to the first file after scanning
 const uploadedCsvFile = ref(null); // For user-uploaded CSV files
 
 // Data for filtered graphs
@@ -97,7 +164,7 @@ const loadData = async () => {
       // Read the uploaded file
       csvText = await readUploadedFile(uploadedCsvFile.value);
       console.log('Using uploaded CSV file:', uploadedCsvFile.value.name);
-    } else {
+    } else if (selectedCsvFile.value) {
       // Get the base URL of the application
       const baseUrl = window.location.origin;
       // Encode the file path to handle spaces and special characters
@@ -113,6 +180,9 @@ const loadData = async () => {
       }
 
       csvText = await response.text();
+    } else {
+      // No file selected or uploaded
+      throw new Error('No CSV file selected or uploaded. Please scan the public directory first or upload a file.');
     }
 
     // Function to read an uploaded file
@@ -1715,6 +1785,11 @@ const measurementPeriodText = computed(() => {
 onMounted(async () => {
   console.log('Component mounted');
   try {
+    // First scan the public directory for CSV files
+    await scanPublicDirectory();
+    console.log('Public directory scanned for CSV files');
+
+    // Then load data from the selected file
     await loadData();
     console.log('Data loaded and chart prepared');
   } catch (err) {
