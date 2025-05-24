@@ -26,6 +26,28 @@ const avgDiastolicColor = ref('#888888'); // Default gray color for diastolic av
 const measurementStartDate = ref(null); // Start date of the measurement period
 const measurementEndDate = ref(null); // End date of the measurement period
 const controlsCollapsed = ref(false); // Track if controls are collapsed
+const isPrintMode = ref(false); // Track if print mode is active
+
+// Function to optimize charts for printing
+const optimizeChartsForPrint = () => {
+  // Give the browser a moment to apply the print-mode styles
+  setTimeout(() => {
+    // Force a redraw of all Chart.js instances
+    const canvasElements = document.querySelectorAll('canvas');
+    canvasElements.forEach(canvas => {
+      const chart = Chart.getChart(canvas);
+      if (chart) {
+        chart.resize();
+        chart.update();
+      }
+    });
+
+    // If in print mode, add a small delay before printing to ensure charts are properly rendered
+    if (isPrintMode.value) {
+      console.log('Charts optimized for printing');
+    }
+  }, 300);
+};
 
 // CSV file selection
 const availableCsvFiles = ref([]);
@@ -775,9 +797,20 @@ const prepareChartData = () => {
           maxRotation: 45,
           minRotation: 45,
           font: {
-            size: 12
+            size: 12,
+            weight: 'bold'
           },
-          padding: 10
+          padding: 40,
+          callback: function(value, index) {
+            // Always show month and year for all data points
+            const dataPoint = bpData.value[index];
+            if (dataPoint && dataPoint.dateObj) {
+              const month = ['Ian', 'Feb', 'Mar', 'Apr', 'Mai', 'Iun', 'Iul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][dataPoint.dateObj.getMonth()];
+              const year = dataPoint.dateObj.getFullYear();
+              return `${month} ${year}`;
+            }
+            return '';
+          }
         },
         grid: {
           display: true,
@@ -955,9 +988,20 @@ const prepareHighBPChartData = () => {
           maxRotation: 45,
           minRotation: 45,
           font: {
-            size: 10
+            size: 10,
+            weight: 'bold'
           },
-          padding: 5
+          padding: 5,
+          callback: function(value, index) {
+            // Always show month and year for all data points
+            const dataPoint = highBPData.value[index];
+            if (dataPoint && dataPoint.dateObj) {
+              const month = ['Ian', 'Feb', 'Mar', 'Apr', 'Mai', 'Iun', 'Iul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][dataPoint.dateObj.getMonth()];
+              const year = dataPoint.dateObj.getFullYear();
+              return `${month} ${year}`;
+            }
+            return '';
+          }
         },
         grid: {
           display: true,
@@ -1123,9 +1167,20 @@ const prepareNocturnalChartData = () => {
           maxRotation: 45,
           minRotation: 45,
           font: {
-            size: 10
+            size: 10,
+            weight: 'bold'
           },
-          padding: 5
+          padding: 5,
+          callback: function(value, index) {
+            // Always show month and year for all data points
+            const dataPoint = nocturnalData.value[index];
+            if (dataPoint && dataPoint.dateObj) {
+              const month = ['Ian', 'Feb', 'Mar', 'Apr', 'Mai', 'Iun', 'Iul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][dataPoint.dateObj.getMonth()];
+              const year = dataPoint.dateObj.getFullYear();
+              return `${month} ${year}`;
+            }
+            return '';
+          }
         },
         grid: {
           display: true,
@@ -1296,9 +1351,20 @@ const prepareMediumBPChartData = () => {
           maxRotation: 45,
           minRotation: 45,
           font: {
-            size: 10
+            size: 10,
+            weight: 'bold'
           },
-          padding: 5
+          padding: 5,
+          callback: function(value, index) {
+            // Always show month and year for all data points
+            const dataPoint = mediumBPData.value[index];
+            if (dataPoint && dataPoint.dateObj) {
+              const month = ['Ian', 'Feb', 'Mar', 'Apr', 'Mai', 'Iun', 'Iul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][dataPoint.dateObj.getMonth()];
+              const year = dataPoint.dateObj.getFullYear();
+              return `${month} ${year}`;
+            }
+            return '';
+          }
         },
         grid: {
           display: true,
@@ -1655,7 +1721,7 @@ const createAnnotations = (monthIndices = []) => {
           weight: 'bold'
         },
         padding: 5,
-        yAdjust: 20 // Move label below the x-axis
+        yAdjust: 40 // Move label further below the x-axis to avoid overlap with tick labels
       }
     });
   });
@@ -1792,6 +1858,25 @@ onMounted(async () => {
     // Then load data from the selected file
     await loadData();
     console.log('Data loaded and chart prepared');
+
+    // Add event listener for print
+    window.addEventListener('beforeprint', () => {
+      console.log('Before print event detected');
+      // Set print mode to true to apply print styles
+      isPrintMode.value = true;
+      // Optimize charts for printing
+      optimizeChartsForPrint();
+    });
+
+    // Add event listener for after print
+    window.addEventListener('afterprint', () => {
+      console.log('After print event detected');
+      // Set print mode back to false if it wasn't explicitly set by the user
+      if (!document.querySelector('.print-mode-btn.active')) {
+        isPrintMode.value = false;
+      }
+    });
+
   } catch (err) {
     console.error('Error in onMounted:', err);
     error.value = 'Error initializing graph: ' + err.message;
@@ -1800,7 +1885,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="bp-graph-container">
+  <div class="bp-graph-container" :class="{ 'print-mode': isPrintMode }">
     <h2>Blood Pressure and Pulse Graph</h2>
     <div v-if="measurementPeriodText" class="measurement-period">
       {{ measurementPeriodText }}
@@ -1808,7 +1893,17 @@ onMounted(async () => {
 
     <div class="controls-header">
       <button class="toggle-controls-btn" @click="controlsCollapsed = !controlsCollapsed">
-        {{ controlsCollapsed ? 'Arată controalele' : 'Ascunde controalele' }}
+        <i :class="controlsCollapsed ? 'fas fa-chevron-down' : 'fas fa-chevron-up'"></i>
+      </button>
+      <button class="print-mode-btn" @click="isPrintMode = !isPrintMode; if(isPrintMode) optimizeChartsForPrint();" :class="{ 'active': isPrintMode }">
+        <i class="fas fa-eye"></i> {{ isPrintMode ? 'Exit Print Preview' : 'Print Preview' }}
+      </button>
+      <button class="print-now-btn" @click="() => {
+          isPrintMode = true;
+          optimizeChartsForPrint();
+          setTimeout(() => window.print(), 500);
+        }">
+        <i class="fas fa-print"></i> Print Now
       </button>
     </div>
 
@@ -1911,18 +2006,20 @@ onMounted(async () => {
       {{ error }}
     </div>
 
-    <div v-if="!loading && !error" class="graph-wrapper">
-      <Line
-        v-if="chartData && chartOptions"
-        :data="chartData"
-        :options="chartOptions"
-      />
-    </div>
+    <!-- All graphs wrapper -->
+    <div v-if="!loading && !error" class="all-graphs-wrapper">
+      <div class="graph-wrapper">
+        <Line
+          v-if="chartData && chartOptions"
+          :data="chartData"
+          :options="chartOptions"
+        />
+      </div>
 
-    <!-- Separate graphs for specific BP ranges -->
-    <div v-if="!loading && !error" class="specific-graphs">
+      <!-- Separate graphs for specific BP ranges -->
+      <div class="specific-graphs">
       <!-- High BP Graph (Systolic >= 140 mmHg) -->
-      <div v-if="highBPData.length > 0" class="specific-graph-container">
+      <div v-if="highBPData.length > 0" class="specific-graph-container systolic-bp-container">
         <h3>Tensiune Sistolică ≥ 140 mmHg</h3>
         <div class="specific-graph-wrapper">
           <Line
@@ -1938,7 +2035,7 @@ onMounted(async () => {
       </div>
 
       <!-- Medium BP Graph (Systolic between 130-140 mmHg) -->
-      <div v-if="mediumBPData.length > 0" class="specific-graph-container">
+      <div v-if="mediumBPData.length > 0" class="specific-graph-container systolic-bp-container">
         <h3>Tensiune Sistolică între 130-140 mmHg</h3>
         <div class="specific-graph-wrapper">
           <Line
@@ -1983,6 +2080,7 @@ onMounted(async () => {
           <p>Distribuția măsurătorilor pe zile și ore</p>
         </div>
       </div>
+    </div>
     </div>
 
     <!-- Blood Pressure Statistics Summary -->
@@ -2070,6 +2168,15 @@ h2 {
   color: #dc3545;
   background-color: #f8d7da;
   border: 1px solid #f5c6cb;
+}
+
+.all-graphs-wrapper {
+  display: block;
+  position: relative;
+  page-break-inside: avoid;
+  break-inside: avoid;
+  margin-bottom: 30px;
+  width: 100%;
 }
 
 .graph-wrapper {
@@ -2232,9 +2339,10 @@ h2 {
   display: flex;
   justify-content: center;
   margin-bottom: 10px;
+  gap: 10px;
 }
 
-.toggle-controls-btn {
+.toggle-controls-btn, .print-mode-btn, .print-now-btn {
   background-color: #4a90e2;
   color: white;
   border: none;
@@ -2246,8 +2354,30 @@ h2 {
   transition: background-color 0.3s;
 }
 
-.toggle-controls-btn:hover {
+.toggle-controls-btn:hover, .print-mode-btn:hover, .print-now-btn:hover {
   background-color: #3a7bc8;
+}
+
+.print-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.print-mode-btn.active {
+  background-color: #28a745;
+}
+
+.print-mode-btn i, .print-now-btn i {
+  font-size: 14px;
+}
+
+.print-now-btn {
+  background-color: #28a745; /* Green color for the print now button */
+}
+
+.print-now-btn:hover {
+  background-color: #218838; /* Darker green on hover */
 }
 
 /* Collapsible controls */
@@ -2448,5 +2578,331 @@ h2 {
 
 .heat-map-graph h3 {
   color: #FF0000; /* Red text */
+}
+/* Print mode class for preview */
+.print-mode {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 auto !important;
+  padding: 10px !important;
+  background-color: white !important;
+  display: block !important; /* Use block instead of grid for better browser compatibility */
+}
+
+.print-mode .controls-header,
+.print-mode .controls,
+.print-mode .toggle-controls-btn,
+.print-mode .print-now-btn {
+  display: none !important;
+}
+
+/* Main title and period section */
+.print-mode h2 {
+  text-align: center !important;
+  color: black !important;
+  margin: 0 0 5px 0 !important;
+  padding: 0 !important;
+  font-size: 24px !important;
+  font-weight: bold !important;
+}
+
+.print-mode .measurement-period {
+  text-align: center !important;
+  color: black !important;
+  margin: 0 0 15px 0 !important;
+  padding: 0 !important;
+  font-size: 16px !important;
+  font-style: normal !important;
+}
+
+/* Legend section */
+.print-mode .night-measurement-legend {
+  margin: 10px 0 20px 0 !important;
+  padding: 10px !important;
+  border: 1px solid #ddd !important;
+  background-color: #f9f9f9 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.print-mode .legend-item {
+  margin: 5px 0 !important;
+}
+
+/* Main graph section */
+.print-mode .all-graphs-wrapper {
+  display: block !important;
+  width: 100% !important;
+  margin: 0 0 30px 0 !important;
+  padding: 0 !important;
+}
+
+.print-mode .graph-wrapper {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 350px !important;
+  max-height: 500px !important;
+  margin: 0 0 20px 0 !important;
+  padding: 10px !important;
+  border: 1px solid #ddd !important;
+  overflow: visible !important;
+}
+
+/* Specific graphs section */
+.print-mode .specific-graphs {
+  display: block !important;
+  width: 100% !important;
+  margin: 30px 0 !important;
+  padding: 0 !important;
+}
+
+.print-mode .specific-graph-container {
+  width: 100% !important;
+  margin: 0 0 30px 0 !important;
+  padding: 10px !important;
+  border: 1px solid #ddd !important;
+  box-shadow: none !important;
+}
+
+.print-mode .specific-graph-container:last-child {
+  margin-bottom: 0 !important;
+}
+
+.print-mode .specific-graph-wrapper {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 250px !important;
+  max-height: 350px !important;
+  margin: 10px 0 !important;
+  padding: 10px !important;
+  border: 1px solid #eee !important;
+  overflow: visible !important;
+}
+
+/* Stats summary section */
+.print-mode .bp-stats-summary {
+  display: block !important;
+  width: 100% !important;
+  margin: 30px 0 0 0 !important;
+  padding: 15px !important;
+  border: 1px solid #ddd !important;
+  background-color: #f9f9f9 !important;
+}
+
+.print-mode .stats-section {
+  margin: 0 0 20px 0 !important;
+}
+
+.print-mode .stats-section:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* Text styling for print */
+.print-mode h3 {
+  color: black !important;
+  margin: 10px 0 !important;
+  padding: 0 !important;
+  font-size: 18px !important;
+  font-weight: bold !important;
+}
+
+.print-mode .legend-text,
+.print-mode .specific-graph-info p {
+  color: black !important;
+  font-size: 14px !important;
+  margin: 5px 0 !important;
+  line-height: 1.3 !important;
+}
+
+/* Chart.js specific optimizations */
+.print-mode canvas {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+/* Print styles */
+@media print {
+  /* Reset and basic container setup */
+  * {
+    -webkit-print-color-adjust: exact !important; /* Chrome, Safari */
+    color-adjust: exact !important; /* Firefox */
+    print-color-adjust: exact !important; /* Future standard */
+  }
+
+  body {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background-color: white !important;
+    font-size: 12pt !important;
+  }
+
+  .bp-graph-container {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 auto !important;
+    padding: 10px !important;
+    background-color: white !important;
+    display: block !important; /* Use block instead of grid for better browser compatibility */
+  }
+
+  /* Hide controls when printing */
+  .controls-header,
+  .controls,
+  .file-selection-control,
+  .interval-control,
+  .line-control,
+  .color-control,
+  .toggle-controls-btn,
+  .print-mode-btn,
+  .print-now-btn {
+    display: none !important;
+  }
+
+  /* Main title and period section */
+  h2 {
+    text-align: center !important;
+    color: black !important;
+    margin: 0 0 5px 0 !important;
+    padding: 0 !important;
+    font-size: 18pt !important;
+    font-weight: bold !important;
+  }
+
+  .measurement-period {
+    text-align: center !important;
+    color: black !important;
+    margin: 0 0 15px 0 !important;
+    padding: 0 !important;
+    font-size: 12pt !important;
+    font-style: normal !important;
+  }
+
+  /* Legend section */
+  .night-measurement-legend {
+    margin: 10px 0 20px 0 !important;
+    padding: 10px !important;
+    border: 1px solid #ddd !important;
+    background-color: #f9f9f9 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .legend-item {
+    margin: 5px 0 !important;
+  }
+
+  /* Main graph section */
+  .all-graphs-wrapper {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 0 30px 0 !important;
+    padding: 0 !important;
+    page-break-inside: avoid !important; /* Still needed for some browsers */
+  }
+
+  .graph-wrapper {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 350px !important;
+    max-height: 500px !important;
+    margin: 0 0 20px 0 !important;
+    padding: 10px !important;
+    border: 1px solid #ddd !important;
+    overflow: visible !important;
+  }
+
+  /* Specific graphs section */
+  .specific-graphs {
+    display: block !important;
+    width: 100% !important;
+    margin: 30px 0 !important;
+    padding: 0 !important;
+  }
+
+  .specific-graph-container {
+    width: 100% !important;
+    margin: 0 0 30px 0 !important;
+    padding: 10px !important;
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important; /* Still needed for some browsers */
+  }
+
+  .specific-graph-container:last-child {
+    margin-bottom: 0 !important;
+  }
+
+  .specific-graph-wrapper {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 250px !important;
+    max-height: 350px !important;
+    margin: 10px 0 !important;
+    padding: 10px !important;
+    border: 1px solid #eee !important;
+    overflow: visible !important;
+  }
+
+  /* Stats summary section - force to new page */
+  .bp-stats-summary {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 15px !important;
+    border: 1px solid #ddd !important;
+    background-color: #f9f9f9 !important;
+    page-break-before: always !important;
+    page-break-inside: avoid !important;
+  }
+
+  .stats-section {
+    margin: 0 0 20px 0 !important;
+    page-break-inside: avoid !important;
+  }
+
+  .stats-section:last-child {
+    margin-bottom: 0 !important;
+  }
+
+  /* Text styling for print */
+  h3 {
+    color: black !important;
+    margin: 10px 0 !important;
+    padding: 0 !important;
+    font-size: 14pt !important;
+    font-weight: bold !important;
+  }
+
+  .legend-text,
+  .specific-graph-info p {
+    color: black !important;
+    font-size: 10pt !important;
+    margin: 5px 0 !important;
+    line-height: 1.3 !important;
+  }
+
+  /* Chart.js specific print optimizations */
+  canvas {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Browser-specific fixes */
+  /* Chrome/Safari */
+  @media screen and (-webkit-min-device-pixel-ratio:0) {
+    .all-graphs-wrapper {
+      display: inline-block !important;
+      width: 100% !important;
+    }
+  }
+
+  /* Firefox */
+  @-moz-document url-prefix() {
+    .all-graphs-wrapper {
+      display: table !important;
+      width: 100% !important;
+    }
+  }
 }
 </style>
