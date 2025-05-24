@@ -2641,7 +2641,7 @@ h2 {
   width: 100% !important;
   height: auto !important;
   min-height: 350px !important;
-  max-height: 500px !important;
+  /* Removed max-height constraint to allow graph to fill the page */
   margin: 0 0 20px 0 !important;
   padding: 10px !important;
   border: 1px solid #ddd !important;
@@ -2672,7 +2672,7 @@ h2 {
   width: 100% !important;
   height: auto !important;
   min-height: 250px !important;
-  max-height: 350px !important;
+  /* Removed max-height constraint to allow graph to fill the page */
   margin: 10px 0 !important;
   padding: 10px !important;
   border: 1px solid #eee !important;
@@ -2717,7 +2717,7 @@ h2 {
 /* Chart.js specific optimizations */
 .print-mode canvas {
   max-width: 100% !important;
-  height: auto !important;
+  height: 100% !important; /* Changed from auto to 100% to fill available space */
 }
 
 /* Print styles */
@@ -2805,7 +2805,7 @@ h2 {
     width: 100% !important;
     height: auto !important;
     min-height: 350px !important;
-    max-height: 500px !important;
+    /* Removed max-height constraint to allow graph to fill the page */
     margin: 0 0 20px 0 !important;
     padding: 10px !important;
     border: 1px solid #ddd !important;
@@ -2837,7 +2837,7 @@ h2 {
     width: 100% !important;
     height: auto !important;
     min-height: 250px !important;
-    max-height: 350px !important;
+    /* Removed max-height constraint to allow graph to fill the page */
     margin: 10px 0 !important;
     padding: 10px !important;
     border: 1px solid #eee !important;
@@ -2885,7 +2885,7 @@ h2 {
   /* Chart.js specific print optimizations */
   canvas {
     max-width: 100% !important;
-    height: auto !important;
+    height: 100% !important; /* Changed from auto to 100% to fill available space */
   }
 
   /* Browser-specific fixes */
